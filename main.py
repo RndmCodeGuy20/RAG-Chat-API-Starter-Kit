@@ -87,21 +87,33 @@ def main():
             return
 
         # Example query
-        query = "Why do we need to use embeddings?"
+        query = "What is the capital of France?"
 
         # Get the relevant documents with relevance scores
         results = chroma_db.similarity_search_with_relevance_scores(query=query, k=3)
 
         # Log the raw response
-        logging.info(f"Raw ChromaDB Response: {results}")
+        logging.info(f"Raw ChromaDB Response: {len(results)} results found. With scores: {[result[1] for result in results]}")
 
         if not results:
             logging.warning("No relevant documents found in ChromaDB.")
             return
 
-        # Extract the relevant documents and scores
-        relevant_documents = [doc for doc, score in results]
-        relevant_scores = [score for doc, score in results]
+        # Extract the relevant documents and scores but only allow documents with score > 0.4
+        relevant_documents = []
+        relevant_scores = []
+
+        for doc, score in results:
+            if score > 0.4:
+                relevant_documents.append(doc)
+                relevant_scores.append(score)
+            else:
+                logging.warning(f"Document with score {score} is below threshold and will not be included.")
+                continue
+        
+        if not relevant_documents:
+            logging.warning("No relevant documents found after filtering by score.")
+            return
 
         # Log the extracted documents and scores
         for i, doc in enumerate(relevant_documents):
@@ -136,7 +148,7 @@ def main():
             raise
             
     except Exception as e:
-        logging.error(f"Error in main: {e}")
+        logging.error(f"Error in main: {e}, traceback: {e.__traceback__}")
 
 if __name__ == "__main__":
     main()
