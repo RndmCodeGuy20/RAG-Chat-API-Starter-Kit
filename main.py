@@ -26,14 +26,15 @@ if not DATA_STORE_PATH:
 LLM_MODEL_NAME = "gemini-1.5-pro"  # Use gemini-pro as default model
 
 PROMPT_TEMPLATE = """
-Answer the question based only on the following context:
+    Answer the question as detailed as possible and with appropriate code examples from the provided context, 
+    make sure to provide all the details, if the answer is not in the provided context just say, "Sorry, can't help you with that". 
+    Strictly follow the context and do not add any extra information. Do not repeat the question in your answer.
+    
+    Context: {context} \n
+    Question: {question} \n
 
-{context}
-
----
-
-Answer the question based on the above context: {question}, if you don't know the answer, say "Sorry, but I can only help you with context related queries.".
-"""
+    Answer:
+    """
 
 def ensure_directories_exist():
     """Ensure that required directories exist."""
@@ -87,10 +88,10 @@ def main():
             return
 
         # Example query
-        query = "What is the capital of France?"
+        query = "How can i install nudge for ios?"
 
         # Get the relevant documents with relevance scores
-        results = chroma_db.similarity_search_with_relevance_scores(query=query, k=3)
+        results = chroma_db.similarity_search_with_relevance_scores(query=query, k=5)
 
         # Log the raw response
         logging.info(f"Raw ChromaDB Response: {len(results)} results found. With scores: {[result[1] for result in results]}")

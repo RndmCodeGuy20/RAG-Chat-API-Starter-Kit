@@ -1,7 +1,7 @@
 .DS_Store
 *.pyc
 __pycache__/
-.chat-env/
+# .chat-env/
 *.env
 *.ipynb_checkpoints
 *.log
@@ -16,3 +16,4 @@ __pycache__/
 responses/
 db/knowledge_base/*
 db/chroma/*
+*.md

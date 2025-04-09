@@ -16,8 +16,8 @@ load_dotenv()
 CHROMA_DB_PATH = os.getenv("CHROMA_PATH")
 DATA_STORE_PATH = os.getenv("DATA_STORE_PATH")
 EMBEDDING_MODEL_NAME = "models/text-embedding-004"
-CHUNK_SIZE = 300
-CHUNK_OVERLAP = 100
+CHUNK_SIZE = 1000
+CHUNK_OVERLAP = 500
 
 def _validate_environment_variables():
     """Validates that required environment variables are set."""
@@ -32,7 +32,7 @@ def load_documents(directory: str) -> list[Document]:
     logging.info(f"Loading documents from: {directory}")
     if not os.path.exists(directory):
         raise FileNotFoundError(f"Directory not found: {directory}")
-    loader = DirectoryLoader(directory)
+    loader = DirectoryLoader(directory, glob="**/*.md")
     documents = loader.load()
     logging.info(f"Loaded {len(documents)} documents from: {directory}")
     return documents
