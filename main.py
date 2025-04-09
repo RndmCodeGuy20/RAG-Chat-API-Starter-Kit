@@ -88,7 +88,7 @@ def main():
             return
 
         # Example query
-        query = "How can i install nudge for ios?"
+        query = "What do we mean by 'knowledge base'?"
 
         # Get the relevant documents with relevance scores
         results = chroma_db.similarity_search_with_relevance_scores(query=query, k=5)

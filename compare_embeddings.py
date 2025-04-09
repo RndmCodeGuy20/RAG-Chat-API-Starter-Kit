@@ -75,7 +75,7 @@ def main():
         logging.info("Vector store loaded successfully.")
 
         # Embed query
-        query = "How to install nudge?"
+        query = "What do we mean by 'knowledge base'?"
         logging.info("Embedding query...")
         query_embedding = embeddings.embed_query(query)
         if not query_embedding:
