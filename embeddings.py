@@ -16,8 +16,8 @@ load_dotenv()
 CHROMA_DB_PATH = os.getenv("CHROMA_PATH")
 DATA_STORE_PATH = os.getenv("DATA_STORE_PATH")
 EMBEDDING_MODEL_NAME = "models/text-embedding-004"
-CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 500
+CHUNK_SIZE = 300
+CHUNK_OVERLAP = 100
 
 def _validate_environment_variables():
     """Validates that required environment variables are set."""
