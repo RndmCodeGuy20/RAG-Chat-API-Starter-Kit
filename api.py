@@ -315,7 +315,7 @@ async def reload_chroma():
         # First check if we can write to the directory
         logging.info("Checking ChromaDB directory permissions: %s", CHROMA_DB_PATH)
 
-        return {"message": "Reloading ChromaDB..."}
+        # return {"message": "Reloading ChromaDB..."}
 
         # Create parent directory if it doesn't exist
         os.makedirs(os.path.dirname(CHROMA_DB_PATH), exist_ok=True)
