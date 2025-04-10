@@ -42,8 +42,7 @@ def load_documents(directory: str) -> list[Document]:
     loader = GithubFileLoader(
         repo="nudgenow/nudge-devdocs",
         branch="prod_main",
-        glob="docs/**/*.md",
-        file_filter=lambda file_path: file_path.endswith(".md"),
+        file_filter=lambda file_path: file_path.endswith(".md") and file_path.startswith("docs/"),
         directory=["docs/"],
         access_token=GITHUB_TOKEN,
     )
