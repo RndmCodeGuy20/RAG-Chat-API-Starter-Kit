@@ -3,6 +3,7 @@
 __pycache__/
 # .chat-env/
 *.env
+*.env.*
 *.ipynb_checkpoints
 *.log
 *.sqlite3
