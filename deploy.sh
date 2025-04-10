@@ -8,4 +8,4 @@ set -e
 docker-compose up -d
 
 echo "API is running at http://localhost:8000"
-echo "To test it, try: curl -X POST http://localhost:8000/query -H 'Content-Type: application/json' -d '{\"query\":\"How to install Nudge?\"}'"
+echo "To test it, try: curl -X POST http://localhost:8000/query -H 'Content-Type: application/json' -d '{\"query\":\"How to install rcg?\"}'"
