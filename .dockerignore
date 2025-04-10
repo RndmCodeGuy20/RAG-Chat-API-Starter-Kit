@@ -1,0 +1,15 @@
+.git
+.gitignore
+.github
+.chat-env
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.env
+*.log
+db/*
