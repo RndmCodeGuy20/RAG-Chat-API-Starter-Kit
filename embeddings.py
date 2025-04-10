@@ -3,6 +3,7 @@ import os
 import logging
 from dotenv import load_dotenv
 from langchain_community.document_loaders import DirectoryLoader
+from langchain_community.document_loaders import GithubFileLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
@@ -17,6 +18,7 @@ load_dotenv()
 
 CHROMA_DB_PATH = os.getenv("CHROMA_PATH")
 DATA_STORE_PATH = os.getenv("DATA_STORE_PATH")
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 EMBEDDING_MODEL_NAME = "models/text-embedding-004"
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 500
@@ -36,7 +38,13 @@ def load_documents(directory: str) -> list[Document]:
     logging.info(f"Loading documents from: {directory}")
     if not os.path.exists(directory):
         raise FileNotFoundError(f"Directory not found: {directory}")
-    loader = DirectoryLoader(directory, glob="**/*.md")
+    # loader = DirectoryLoader(directory, glob="**/*.md")
+    loader = GithubFileLoader(
+        repo="rndmcodeguy20/model-builder",
+        branch="master",
+        file_filter=lambda file_path: file_path.endswith(".md") and file_path.startswith("docs/"),
+        access_token=GITHUB_TOKEN,
+    )
     documents = loader.load()
     logging.info(f"Loaded {len(documents)} documents from: {directory}")
     return documents
