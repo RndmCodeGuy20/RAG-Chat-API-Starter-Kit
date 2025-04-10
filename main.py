@@ -11,11 +11,13 @@ from langchain_core.documents import Document
 load_dotenv()
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 CHROMA_DB_PATH = os.getenv("CHROMA_PATH")
 DATA_STORE_PATH = os.getenv("DATA_STORE_PATH")
-RESPONSE_FILE_PATH = os.path.join('', "response.md")
+RESPONSE_FILE_PATH = os.path.join("", "response.md")
 
 if not CHROMA_DB_PATH:
     raise ValueError("CHROMA_PATH environment variable is not set.")
@@ -36,38 +38,48 @@ PROMPT_TEMPLATE = """
     Answer:
     """
 
+
 def ensure_directories_exist():
     """Ensure that required directories exist."""
     os.makedirs(CHROMA_DB_PATH, exist_ok=True)
     os.makedirs(DATA_STORE_PATH, exist_ok=True)
 
+
 def main():
     # Ensure directories exist
     ensure_directories_exist()
-    
+
     # Check if the data directory has any files
     has_files = False
     if os.path.exists(DATA_STORE_PATH):
         for root, dirs, files in os.walk(DATA_STORE_PATH):
-            if any(file.endswith(('.txt', '.md', '.pdf')) for file in files):
+            if any(file.endswith((".txt", ".md", ".pdf")) for file in files):
                 has_files = True
                 break
-    
+
     if not has_files:
-        logging.warning(f"No documents found in {DATA_STORE_PATH}. Please add some documents first.")
+        logging.warning(
+            f"No documents found in {DATA_STORE_PATH}. Please add some documents first."
+        )
         return
 
     # Check if embeddings need to be generated
     if not os.path.exists(CHROMA_DB_PATH) or not os.listdir(CHROMA_DB_PATH):
         logging.info("No ChromaDB found. Running embedding generation...")
         # Import here to avoid circular imports
-        from embeddings import generate_data_store, EMBEDDING_MODEL_NAME, CHUNK_SIZE, CHUNK_OVERLAP
+        from embeddings import (
+            generate_data_store,
+            EMBEDDING_MODEL_NAME,
+            CHUNK_SIZE,
+            CHUNK_OVERLAP,
+        )
+
         generate_data_store(
             DATA_STORE_PATH,
             CHROMA_DB_PATH,
             EMBEDDING_MODEL_NAME,
             CHUNK_SIZE,
-            CHUNK_OVERLAP
+            CHUNK_OVERLAP,
         )
 
     embedding_function = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
@@ -82,9 +94,11 @@ def main():
         # Debug: Check if ChromaDB has documents
         collection_stats = chroma_db._collection.count()
         logging.info(f"ChromaDB collection contains {collection_stats} documents")
-        
+
         if collection_stats == 0:
-            logging.warning("ChromaDB is empty. Please ensure documents are loaded correctly.")
+            logging.warning(
+                "ChromaDB is empty. Please ensure documents are loaded correctly."
+            )
             return
 
         # Example query
@@ -94,7 +108,9 @@ def main():
         results = chroma_db.similarity_search_with_relevance_scores(query=query, k=5)
 
         # Log the raw response
-        logging.info(f"Raw ChromaDB Response: {len(results)} results found. With scores: {[result[1] for result in results]}")
+        logging.info(
+            f"Raw ChromaDB Response: {len(results)} results found. With scores: {[result[1] for result in results]}"
+        )
 
         if not results:
             logging.warning("No relevant documents found in ChromaDB.")
@@ -109,19 +125,25 @@ def main():
                 relevant_documents.append(doc)
                 relevant_scores.append(score)
             else:
-                logging.warning(f"Document with score {score} is below threshold and will not be included.")
+                logging.warning(
+                    f"Document with score {score} is below threshold and will not be included."
+                )
                 continue
-        
+
         if not relevant_documents:
             logging.warning("No relevant documents found after filtering by score.")
             return
 
         # Log the extracted documents and scores
         for i, doc in enumerate(relevant_documents):
-            logging.info(f"Retrieved Document {i+1}:\nContent: {doc.page_content}\nScore: {relevant_scores[i]}")
+            logging.info(
+                f"Retrieved Document {i+1}:\nContent: {doc.page_content}\nScore: {relevant_scores[i]}"
+            )
 
         # Format the context for the prompt
-        context_text = "\n\n---\n\n".join([doc.page_content for doc in relevant_documents])
+        context_text = "\n\n---\n\n".join(
+            [doc.page_content for doc in relevant_documents]
+        )
 
         # Create the prompt
         prompt_template = ChatPromptTemplate.from_template(PROMPT_TEMPLATE)
@@ -147,9 +169,10 @@ def main():
         except Exception as e:
             logging.error(f"Error calling Google Generative AI: {e}")
             raise
-            
+
     except Exception as e:
         logging.error(f"Error in main: {e}, traceback: {e.__traceback__}")
+
 
 if __name__ == "__main__":
     main()

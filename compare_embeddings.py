@@ -1,15 +1,17 @@
+import os
+import logging
+from typing import List, Dict, Any
+
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain.evaluation import load_evaluator
 from dotenv import load_dotenv
 from google import genai
 
-import os
-import logging
-from typing import List, Dict, Any
-
 # Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 
 def get_env_variable(var_name: str) -> str:
@@ -92,7 +94,9 @@ def main():
         # Print results
         logging.info("Results:")
         for result in results:
-            logging.info(f"Distance: {result['distance']}, Metadata: {result['metadata']}")
+            logging.info(
+                f"Distance: {result['distance']}, Metadata: {result['metadata']}"
+            )
 
         logging.info("Data store generated successfully.")
 
