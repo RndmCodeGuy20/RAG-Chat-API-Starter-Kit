@@ -40,10 +40,9 @@ def load_documents(directory: str) -> list[Document]:
         raise FileNotFoundError(f"Directory not found: {directory}")
     # loader = DirectoryLoader(directory, glob="**/*.md")
     loader = GithubFileLoader(
-        repo="nudgenow/nudge-devdocs",
-        branch="prod_main",
+        repo="rndmcodeguy20/model-builder",
+        branch="master",
         file_filter=lambda file_path: file_path.endswith(".md") and file_path.startswith("docs/"),
-        directory=["docs/"],
         access_token=GITHUB_TOKEN,
     )
     documents = loader.load()
