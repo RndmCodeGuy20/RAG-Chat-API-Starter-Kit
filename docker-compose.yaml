@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   api:
     build: .
@@ -7,16 +5,14 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # Use a named volume for persistence instead of a bind mount
+      # Use a named volume for persistent ChromaDB storage
       - chroma_data:/app/db/chroma
-      - ${DATA_STORE_PATH:-./docs}:/app/docs
     environment:
       - CHROMA_PATH=/app/db/chroma
-      - DATA_STORE_PATH=/app/docs
+      - DATA_STORE_PATH=/app/db/knowledge_base
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
     restart: unless-stopped
 
 volumes:
   chroma_data:
-    # This ensures the volume is pre-populated with the data from the image
     driver: local
