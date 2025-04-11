@@ -1,6 +1,6 @@
 FROM python:3.12-slim
 
-WORKDIR /app
+WORKDIR /workspace
 
 # Set environment variables
 ENV APP_NAME=rag_chat_api
@@ -23,10 +23,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy pre-built ChromaDB (if it exists locally)
-COPY db/chroma /app/db/chroma
-
-# Set proper permissions for the ChromaDB
-RUN chmod -R 755 /app/db/chroma
+COPY db/chroma /workspace/db/chroma
 
 # Copy configuration files
 COPY .env.prod ./.env.prod
