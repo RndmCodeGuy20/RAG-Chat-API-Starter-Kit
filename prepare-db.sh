@@ -1,9 +1,6 @@
 #!/bin/bash
 set -e
 
-# Fetch the latest docs from source
-
-
 # Ensure the ChromaDB exists locally
 if [ ! -d "db/chroma" ] || [ ! "$(ls -A db/chroma)" ]; then
   echo "No ChromaDB found. Generating embeddings..."

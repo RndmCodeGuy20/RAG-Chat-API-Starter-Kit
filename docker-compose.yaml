@@ -2,6 +2,7 @@ services:
   api:
     build: .
     container_name: api
+    image: rndmcodeguy/rag-chat-api:v1.0.1
     ports:
       - "8000:8000"
     volumes:
@@ -11,6 +12,7 @@ services:
       - CHROMA_PATH=/app/db/chroma
       - DATA_STORE_PATH=/app/db/knowledge_base
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
     restart: unless-stopped
 
 volumes:
