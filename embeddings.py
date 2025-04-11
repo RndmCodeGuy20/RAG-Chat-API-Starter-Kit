@@ -2,7 +2,6 @@ import shutil
 import os
 import logging
 from dotenv import load_dotenv
-from langchain_community.document_loaders import DirectoryLoader
 from langchain_community.document_loaders import GithubFileLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
@@ -42,7 +41,8 @@ def load_documents(directory: str) -> list[Document]:
     loader = GithubFileLoader(
         repo="rndmcodeguy20/model-builder",
         branch="master",
-        file_filter=lambda file_path: file_path.endswith(".md") and file_path.startswith("docs/"),
+        file_filter=lambda file_path: file_path.endswith(".md") 
+        and file_path.startswith("docs/"),
         access_token=GITHUB_TOKEN,
     )
     documents = loader.load()
