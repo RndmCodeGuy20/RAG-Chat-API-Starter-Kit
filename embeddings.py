@@ -39,8 +39,8 @@ def load_documents(directory: str) -> list[Document]:
         raise FileNotFoundError(f"Directory not found: {directory}")
     # loader = DirectoryLoader(directory, glob="**/*.md")
     loader = GithubFileLoader(
-        repo="rndmcodeguy20/model-builder",
-        branch="master",
+        repo="rndmcodeguy20/circles-api-server",
+        branch="docs/gitbook-docs-sync",
         file_filter=lambda file_path: file_path.endswith(".md") 
         and file_path.startswith("docs/"),
         access_token=GITHUB_TOKEN,
