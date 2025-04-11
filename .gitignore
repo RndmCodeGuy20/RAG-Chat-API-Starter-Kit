@@ -18,3 +18,5 @@ responses/
 db/knowledge_base/*
 db/chroma/*
 *.md
+.chat_env
+.idea
