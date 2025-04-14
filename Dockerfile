@@ -29,9 +29,9 @@ COPY db/chroma /app/db/chroma
 RUN chmod -R 755 /app/db/chroma
 
 # Copy configuration files
-COPY .env.prod ./.env.prod
-COPY docker-entrypoint.sh ./
-RUN chmod +x ./docker-entrypoint.sh
+COPY .env.prod ./.env
+#COPY docker-entrypoint.sh ./app
+#RUN chmod +x ./app/docker-entrypoint.sh
 
 # Copy source code
 COPY embeddings.py api.py ./
@@ -40,5 +40,5 @@ COPY embeddings.py api.py ./
 EXPOSE 8000
 
 # Command to run the application
-ENTRYPOINT ["./docker-entrypoint.sh"]
+#ENTRYPOINT ["./app/docker-entrypoint.sh"]
 CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,13 +1,14 @@
+import sys
 import shutil
 import os
 import logging
 from dotenv import load_dotenv
-from langchain_community.document_loaders import DirectoryLoader
 from langchain_community.document_loaders import GithubFileLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import Chroma
+
 
 # Configure logging
 logging.basicConfig(
@@ -22,6 +23,7 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 EMBEDDING_MODEL_NAME = "models/text-embedding-004"
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 500
+BASE_URL = "https://docs.nudgenow.com/"
 
 
 def _validate_environment_variables():
@@ -33,21 +35,64 @@ def _validate_environment_variables():
     logging.info("Environment variables validated.")
 
 
-def load_documents(directory: str) -> list[Document]:
-    """Loads documents from the specified directory."""
-    logging.info(f"Loading documents from: {directory}")
-    if not os.path.exists(directory):
-        raise FileNotFoundError(f"Directory not found: {directory}")
-    # loader = DirectoryLoader(directory, glob="**/*.md")
+def load_documents(repository: str) -> list[Document]:
+    """Loads documents from the specified repository."""
+    logging.info(f"Loading documents from repository: {repository}")
+    # if not os.path.exists(repository):
+    #     raise FileNotFoundError(f"repository not found: {repository}")
+    # loader = DirectoryLoader(repository, glob="**/*.md")
     loader = GithubFileLoader(
         repo="nudgenow/nudge-devdocs",
         branch="prod_main",
-        file_filter=lambda file_path: file_path.endswith(".md") and file_path.startswith("docs/"),
+        file_filter=lambda file_path: file_path.endswith(
+            ".md") and file_path.startswith("docs/"),
         directory=["docs/"],
         access_token=GITHUB_TOKEN,
     )
     documents = loader.load()
-    logging.info(f"Loaded {len(documents)} documents from: {directory}")
+
+    import re
+    # Process the metadata to remove numbering prefixes
+    for doc in documents:
+        original_path = doc.metadata['source'].split("docs/")[-1]
+        filename = os.path.basename(doc.metadata["source"])
+
+        # Split the path into components
+        path_parts = original_path.split('/')
+
+        # Clean each component by removing the numbering prefix
+        cleaned_parts = [
+            re.sub(r'^\d+[\-\.]', '', part)
+            for part in path_parts
+        ]
+
+        # Reassemble the path
+        cleaned_path = '/'.join(cleaned_parts)
+
+        # Replace spaces with underscores
+        cleaned_path = cleaned_path.replace(' ', '%20')
+
+        # Create web URL (remove .md extension)
+        web_path = os.path.splitext(cleaned_path)[0]
+        web_url = f"{BASE_URL}{web_path}"
+
+        # print(f"Cleaned path: {cleaned_path}")
+        # print(f"Web URL: {web_url}\n")
+
+        if "title" not in doc.metadata:
+            clean_filename = re.sub(r'^\d+[\-\.]', '', filename)
+            clean_title = os.path.splitext(clean_filename)[
+                0].replace('-', ' ').title()
+            doc.metadata['title'] = clean_title
+
+        # Update the document metadata with the new web URL
+        doc.metadata['source'] = web_url
+        doc.metadata['path'] = web_url
+
+    logging.info(
+        f"Loaded {len(documents)} documents from repository: {repository}\n\n"
+    )
+
     return documents
 
 
@@ -79,6 +124,10 @@ def create_chroma_db(
         shutil.rmtree(persist_directory)
 
     embeddings = GoogleGenerativeAIEmbeddings(model=embedding_model)
+
+    __import__('pysqlite3')
+    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+
     db = Chroma.from_documents(
         chunks,
         embeddings,
@@ -97,7 +146,8 @@ def create_chroma_db(
             "ChromaDB is empty after creation. Please check the document loading and splitting process."
         )
     else:
-        logging.info(f"ChromaDB contains {collection_stats} documents after creation.")
+        logging.info(
+            f"ChromaDB contains {collection_stats} documents after creation.")
 
     return db
 

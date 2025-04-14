@@ -10,7 +10,7 @@ services:
     environment:
       - CHROMA_PATH=/app/db/chroma
       - DATA_STORE_PATH=/app/db/knowledge_base
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_API_KEY="AIzaSyCqocy4RGw08bvimmzZRWBV37rm1aq5bHY"
     restart: unless-stopped
 
 volumes:

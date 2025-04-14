@@ -41,8 +41,10 @@ app = FastAPI(
 class QueryRequest(BaseModel):
     """Request model for querying documentation."""
 
-    query: str = Field(..., description="The question to ask about your documentation")
-    max_tokens: Optional[int] = Field(1024, description="Maximum tokens in response")
+    query: str = Field(...,
+                       description="The question to ask about your documentation")
+    max_tokens: Optional[int] = Field(
+        1024, description="Maximum tokens in response")
     relevance_threshold: Optional[float] = Field(
         0.4, description="Minimum relevance score threshold"
     )
@@ -54,7 +56,7 @@ class QueryResponse(BaseModel):
     """Response model for querying documentation."""
 
     answer: str
-    sources: list[str] = []
+    sources: list[dict] = []
     relevance_scores: list[float] = []
 
 
@@ -73,7 +75,7 @@ You are a specialized technical documentation assistant for software developers.
 ## INSTRUCTIONS
 1. Answer ONLY based on the provided context above.
 2. If the context contains the complete answer, provide a detailed and thorough response.
-3. If the context contains partial information, answer with what's available and clearly indicate what information is missing.
+3. Never say phrases like "based on the documentation," "according to the context," or "the information provided."
 4. If the answer isn't in the context at all, respond with: "Based on the available documentation, I don't have information about this specific topic."
 5. Include relevant code examples from the context when applicable.
 6. Format your answer for clarity:
@@ -84,6 +86,8 @@ You are a specialized technical documentation assistant for software developers.
 8. If technical steps are involved, present them as numbered steps.
 9. If there are warnings or important notes in the context, highlight them clearly.
 10. If the user interacts with you by greetings or thanks, respond politely but keep the focus on the documentation.
+11. Answer directly as if this information is your own knowledge, not as if you're referencing documentation.
+12. If you don't have enough information to answer confidently, suggest the user check specific relevant documentation pages (use the URLs in the context).
 
 ## ANSWER:
 """
@@ -169,6 +173,12 @@ async def startup_db_client():
     app.embedding_function = GoogleGenerativeAIEmbeddings(
         model="models/text-embedding-004"
     )
+
+    # Log Secrets
+    logger.debug("""
+    Google API key: %s,
+    Github Token: %s,
+    """, os.getenv("GOOGLE_API_KEY"), os.getenv("GITHUB_TOKEN"))
 
     try:
         app.chroma_db = Chroma(
@@ -267,7 +277,10 @@ async def query_docs(request: QueryRequest):
                 relevant_scores.append(score)
                 # Extract source information
                 if doc.metadata and "source" in doc.metadata:
-                    sources.append(os.path.basename(doc.metadata["source"]))
+                    sources.append({
+                        "source": doc.metadata["source"],
+                        "title": doc.metadata.get("title", "unknown"),
+                    })
                 else:
                     sources.append("unknown")
             else:
@@ -277,7 +290,8 @@ async def query_docs(request: QueryRequest):
                 )
 
         if not relevant_documents:
-            logger.warning("No relevant documents found after filtering by score.")
+            logger.warning(
+                "No relevant documents found after filtering by score.")
             return QueryResponse(
                 answer="I don't have enough information about that in the documentation.",
                 sources=[],
@@ -313,7 +327,8 @@ async def reload_chroma():
     """Endpoint to reload ChromaDB."""
     try:
         # First check if we can write to the directory
-        logging.info("Checking ChromaDB directory permissions: %s", CHROMA_DB_PATH)
+        logging.info(
+            "Checking ChromaDB directory permissions: %s", CHROMA_DB_PATH)
 
         # return {"message": "Reloading ChromaDB..."}
 
@@ -321,7 +336,8 @@ async def reload_chroma():
         os.makedirs(os.path.dirname(CHROMA_DB_PATH), exist_ok=True)
 
         # Attempt to create a test file to verify write permissions
-        test_file = os.path.join(os.path.dirname(CHROMA_DB_PATH), "test_write.txt")
+        test_file = os.path.join(os.path.dirname(
+            CHROMA_DB_PATH), "test_write.txt")
         try:
             with open(test_file, "w") as f:
                 f.write("Testing write permissions")
@@ -338,7 +354,8 @@ Please check permissions or use a different directory.""",
         # Now proceed with the reload
         if os.path.exists(CHROMA_DB_PATH):
             try:
-                logging.warning("Deleting existing ChromaDB at: %s", CHROMA_DB_PATH)
+                logging.warning(
+                    "Deleting existing ChromaDB at: %s", CHROMA_DB_PATH)
                 shutil.rmtree(CHROMA_DB_PATH)
             except PermissionError as e:
                 logging.error("Permission error deleting ChromaDB: %s", e)
@@ -356,7 +373,8 @@ Please check permissions or use a different directory.""",
         chunks = split_text(documents, CHUNK_SIZE, CHUNK_OVERLAP)
 
         logger.info(
-            "Loaded %s documents and split into %s chunks.", len(documents), len(chunks)
+            "Loaded %s documents and split into %s chunks.", len(
+                documents), len(chunks)
         )
 
         embeddings = GoogleGenerativeAIEmbeddings(model=EMBEDDING_MODEL_NAME)
