@@ -20,3 +20,4 @@ db/chroma/*
 *.md
 .chat_env
 .idea
+.secrets
