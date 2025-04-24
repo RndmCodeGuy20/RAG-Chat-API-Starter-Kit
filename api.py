@@ -2,9 +2,11 @@
 
 import os
 import logging
+from pathlib import Path
 import shutil
 from typing import Optional
-from fastapi import FastAPI, HTTPException
+import uuid
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
@@ -64,7 +66,7 @@ class QueryResponse(BaseModel):
 # Replace the current PROMPT_TEMPLATE with this enhanced version
 
 PROMPT_TEMPLATE = """
-You are a specialized technical documentation assistant for software developers.
+You are a specialized historian specializing in Indian History.
 
 ## CONTEXT INFORMATION
 {context}
@@ -75,6 +77,12 @@ You are a specialized technical documentation assistant for software developers.
 ## INSTRUCTIONS
 1. Answer ONLY based on the provided context above.
 2. If the context contains the complete answer, provide a detailed and thorough response.
+
+## ANSWER:
+"""
+
+
+forDocs = """
 3. Never say phrases like "based on the documentation," "according to the context," or "the information provided."
 4. If the answer isn't in the context at all, respond with: "Based on the available documentation, I don't have information about this specific topic."
 5. Include relevant code examples from the context when applicable.
@@ -88,8 +96,6 @@ You are a specialized technical documentation assistant for software developers.
 10. If the user interacts with you by greetings or thanks, respond politely but keep the focus on the documentation.
 11. Answer directly as if this information is your own knowledge, not as if you're referencing documentation.
 12. If you don't have enough information to answer confidently, suggest the user check specific relevant documentation pages (use the URLs in the context).
-
-## ANSWER:
 """
 
 # Add CORS middleware - ADD THIS CODE BLOCK
@@ -198,6 +204,132 @@ async def startup_db_client():
         raise e
 
 
+# Create a directory for uploaded files if it doesn't exist
+UPLOADS_DIR = os.path.join(os.path.dirname(
+    os.path.abspath(__file__)), "uploads")
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+
+
+class ProcessingStatus(BaseModel):
+    """Model for the processing status response."""
+    job_id: str
+    status: str
+    message: str
+
+
+# Dictionary to store background job statuses
+processing_jobs = {}
+
+
+def process_document_background(file_path: str, job_id: str):
+    """Background task to process uploaded document and create embeddings."""
+    try:
+        processing_jobs[job_id] = {
+            "status": "processing", "message": "Processing document and creating embeddings..."}
+
+        # Create a temporary directory for processing
+        temp_dir = os.path.join(UPLOADS_DIR, job_id)
+        os.makedirs(temp_dir, exist_ok=True)
+
+        # Load document and create chunks
+        documents = load_documents(file_path)
+        chunks = split_text(documents, CHUNK_SIZE, CHUNK_OVERLAP)
+
+        # Create embeddings and add to existing ChromaDB
+        embeddings = GoogleGenerativeAIEmbeddings(model=EMBEDDING_MODEL_NAME)
+
+        # Create a separate collection for this upload or add to existing
+        collection_name = f"uploaded_{job_id}"
+
+        # Create a new ChromaDB instance for this document
+        doc_db = Chroma.from_documents(
+            chunks,
+            embeddings,
+            persist_directory=os.path.join(CHROMA_DB_PATH, job_id),
+            collection_name=collection_name,
+        )
+
+        # Update the main ChromaDB to include this collection
+        # This is optional - you might want separate collections per document
+        # Or merge them into your main knowledge base
+
+        # Update job status
+        processing_jobs[job_id] = {
+            "status": "completed",
+            "message": f"Successfully processed document with {len(chunks)} chunks",
+            "collection": collection_name
+        }
+
+    except Exception as e:
+        logger.error(f"Error processing document: {e}")
+        processing_jobs[job_id] = {
+            "status": "failed", "message": f"Error: {str(e)}"}
+
+
+@app.post("/upload", response_model=ProcessingStatus)
+async def upload_document(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    collection_name: str = Form(None)
+):
+    """
+    Upload a document (PDF) to create vector embeddings.
+
+    The document will be processed in the background and its embeddings
+    will be stored in ChromaDB for future queries.
+    """
+    # Generate a unique job ID
+    job_id = str(uuid.uuid4())
+
+    # Create uploads directory if it doesn't exist
+    os.makedirs(UPLOADS_DIR, exist_ok=True)
+
+    # Save the uploaded file
+    file_extension = Path(file.filename).suffix.lower()
+
+    if file_extension != '.pdf':
+        raise HTTPException(
+            status_code=400, detail="Only PDF files are supported at this time"
+        )
+
+    file_path = os.path.join(UPLOADS_DIR, f"{job_id}{file_extension}")
+
+    # Save the uploaded file
+    with open(file_path, "wb") as f:
+        content = await file.read()
+        f.write(content)
+
+    # Initialize job status
+    processing_jobs[job_id] = {"status": "queued",
+                               "message": "Job queued for processing"}
+
+    # Start background processing
+    background_tasks.add_task(process_document_background, file_path, job_id)
+
+    return ProcessingStatus(
+        job_id=job_id,
+        status="queued",
+        message="Document upload successful. Processing started in the background."
+    )
+
+
+@app.get("/upload/status/{job_id}", response_model=ProcessingStatus)
+async def get_processing_status(job_id: str):
+    """Check the status of a document processing job."""
+    if job_id not in processing_jobs:
+        raise HTTPException(
+            status_code=404, detail=f"Job ID {job_id} not found"
+        )
+
+    job_info = processing_jobs[job_id]
+
+    return ProcessingStatus(
+        job_id=job_id,
+        status=job_info["status"],
+        message=job_info["message"]
+    )
+
+
 @app.get("/")
 async def root():
     """Root endpoint to check if the API is running."""
@@ -206,120 +338,218 @@ async def root():
     }
 
 
-@app.post("/query", response_model=QueryResponse)
-async def query_docs(request: QueryRequest):
-    """Endpoint to query the documentation."""
+@app.post("/query/{job_id}", response_model=QueryResponse)
+async def query_specific_document(job_id: str, request: QueryRequest):
+    """Query a specific uploaded document by its job ID."""
+    # Check if the job exists and is completed
+    if job_id not in processing_jobs:
+        raise HTTPException(status_code=404, detail=f"Document with ID {job_id} not found")
+    
+    job_info = processing_jobs[job_id]
+    if job_info["status"] != "completed":
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Document processing is not complete. Current status: {job_info['status']}"
+        )
+    
     try:
+        # Get the specific ChromaDB collection for this document
+        specific_db = Chroma(
+            embedding_function=app.embedding_function,
+            persist_directory=os.path.join(CHROMA_DB_PATH, job_id),
+            collection_name=job_info.get("collection", f"uploaded_{job_id}")
+        )
+        
         # Get the query from the request
         query = request.query
-        logger.info("Received query: %s", query)
-
-        # Check if the query is a greeting or farewell
+        logger.info(f"Received query for document {job_id}: {query}")
+        
+        # Check if greeting/farewell
         message_type, needs_rag = detect_conversation_type(query)
-
-        # Handle greeting
-        if message_type == "greeting":
+        if message_type in ["greeting", "farewell"]:
             return QueryResponse(
-                answer="👋 Hello! I'm your technical documentation assistant. How can I help you with your development questions today?",
+                answer=("👋 Hello! I can answer questions about your uploaded document." 
+                       if message_type == "greeting" else 
+                       "Thanks for using the document assistant!"),
                 sources=[],
-                relevance_scores=[],
+                relevance_scores=[]
             )
-
-        # Handle farewell
-        if message_type == "farewell":
-            return QueryResponse(
-                answer="Thanks for using the documentation assistant. If you have more questions later, feel free to ask!",
-                sources=[],
-                relevance_scores=[],
-            )
-
-        # Get the relevant documents with relevance scores
-        results = app.chroma_db.similarity_search_with_relevance_scores(
+        
+        # Get relevant documents
+        results = specific_db.similarity_search_with_relevance_scores(
             query=query, k=request.k
         )
-
+        
         if not results:
-            logger.warning("No relevant documents found in ChromaDB.")
-
-            # Check if query looks like a question about the documentation
-            doc_related_keywords = [
-                "documentation",
-                "docs",
-                "manual",
-                "guide",
-                "tutorial",
-                "api",
-                "reference",
-            ]
-
-            if any(keyword in query.lower() for keyword in doc_related_keywords):
-                return QueryResponse(
-                    answer="I don't have enough information about that in the documentation. You can try rephrasing your question, or check if your question is related to the available documentation topics.",
-                    sources=[],
-                    relevance_scores=[],
-                )
-
-            # More general fallback
             return QueryResponse(
-                answer="I'm a technical documentation assistant focused on helping with questions about the documented topics. I don't have information about that specific topic in my knowledge base. Please ask a question related to the documentation content.",
+                answer="I couldn't find relevant information in your uploaded document.",
                 sources=[],
-                relevance_scores=[],
+                relevance_scores=[]
             )
-
-        # Filter documents by relevance score
+        
+        # Process results same as in your existing query endpoint
         relevant_documents = []
         relevant_scores = []
         sources = []
-
+        
         for doc, score in results:
             if score > request.relevance_threshold:
                 relevant_documents.append(doc)
                 relevant_scores.append(score)
-                # Extract source information
                 if doc.metadata and "source" in doc.metadata:
                     sources.append({
                         "source": doc.metadata["source"],
                         "title": doc.metadata.get("title", "unknown"),
                     })
                 else:
-                    sources.append("unknown")
-            else:
-                logger.warning(
-                    "Document with score %s is below threshold and will not be included.",
-                    score,
-                )
-
+                    sources.append({"source": "unknown", "title": "unknown"})
+        
         if not relevant_documents:
-            logger.warning(
-                "No relevant documents found after filtering by score.")
             return QueryResponse(
-                answer="I don't have enough information about that in the documentation.",
+                answer="I couldn't find sufficiently relevant information in your uploaded document.",
                 sources=[],
                 relevance_scores=[],
             )
-
-        # Format the context for the prompt
+        
+        # Format context and generate response
         context_text = "\n\n---\n\n".join(
             [doc.page_content for doc in relevant_documents]
         )
-
+        
         # Create the prompt
         prompt_template = ChatPromptTemplate.from_template(PROMPT_TEMPLATE)
         prompt = prompt_template.format(context=context_text, question=query)
-
-        # Send the prompt to the Google Generative AI API
+        
+        # Generate response
         model = ChatGoogleGenerativeAI(
             model=LLM_MODEL_NAME, max_output_tokens=request.max_tokens
         )
         response = model.invoke(prompt)
-
+        
         return QueryResponse(
-            answer=response.content, sources=sources, relevance_scores=relevant_scores
+            answer=response.content, 
+            sources=sources, 
+            relevance_scores=relevant_scores
         )
-
+        
     except Exception as e:
-        logger.error("Error processing query: %s", e)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.error(f"Error querying document {job_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# @app.post("/query", response_model=QueryResponse)
+# async def query_docs(request: QueryRequest):
+#     """Endpoint to query the documentation."""
+#     try:
+#         # Get the query from the request
+#         query = request.query
+#         logger.info("Received query: %s", query)
+
+#         # Check if the query is a greeting or farewell
+#         message_type, needs_rag = detect_conversation_type(query)
+
+#         # Handle greeting
+#         if message_type == "greeting":
+#             return QueryResponse(
+#                 answer="👋 Hello! I'm your technical documentation assistant. How can I help you with your development questions today?",
+#                 sources=[],
+#                 relevance_scores=[],
+#             )
+
+#         # Handle farewell
+#         if message_type == "farewell":
+#             return QueryResponse(
+#                 answer="Thanks for using the documentation assistant. If you have more questions later, feel free to ask!",
+#                 sources=[],
+#                 relevance_scores=[],
+#             )
+
+#         # Get the relevant documents with relevance scores
+#         results = app.chroma_db.similarity_search_with_relevance_scores(
+#             query=query, k=request.k
+#         )
+
+#         if not results:
+#             logger.warning("No relevant documents found in ChromaDB.")
+
+#             # Check if query looks like a question about the documentation
+#             doc_related_keywords = [
+#                 "documentation",
+#                 "docs",
+#                 "manual",
+#                 "guide",
+#                 "tutorial",
+#                 "api",
+#                 "reference",
+#             ]
+
+#             if any(keyword in query.lower() for keyword in doc_related_keywords):
+#                 return QueryResponse(
+#                     answer="I don't have enough information about that in the documentation. You can try rephrasing your question, or check if your question is related to the available documentation topics.",
+#                     sources=[],
+#                     relevance_scores=[],
+#                 )
+
+#             # More general fallback
+#             return QueryResponse(
+#                 answer="I'm a technical documentation assistant focused on helping with questions about the documented topics. I don't have information about that specific topic in my knowledge base. Please ask a question related to the documentation content.",
+#                 sources=[],
+#                 relevance_scores=[],
+#             )
+
+#         # Filter documents by relevance score
+#         relevant_documents = []
+#         relevant_scores = []
+#         sources = []
+
+#         for doc, score in results:
+#             if score > request.relevance_threshold:
+#                 relevant_documents.append(doc)
+#                 relevant_scores.append(score)
+#                 # Extract source information
+#                 if doc.metadata and "source" in doc.metadata:
+#                     sources.append({
+#                         "source": doc.metadata["source"],
+#                         "title": doc.metadata.get("title", "unknown"),
+#                     })
+#                 else:
+#                     sources.append("unknown")
+#             else:
+#                 logger.warning(
+#                     "Document with score %s is below threshold and will not be included.",
+#                     score,
+#                 )
+
+#         if not relevant_documents:
+#             logger.warning(
+#                 "No relevant documents found after filtering by score.")
+#             return QueryResponse(
+#                 answer="I don't have enough information about that in the documentation.",
+#                 sources=[],
+#                 relevance_scores=[],
+#             )
+
+#         # Format the context for the prompt
+#         context_text = "\n\n---\n\n".join(
+#             [doc.page_content for doc in relevant_documents]
+#         )
+
+#         # Create the prompt
+#         prompt_template = ChatPromptTemplate.from_template(PROMPT_TEMPLATE)
+#         prompt = prompt_template.format(context=context_text, question=query)
+
+#         # Send the prompt to the Google Generative AI API
+#         model = ChatGoogleGenerativeAI(
+#             model=LLM_MODEL_NAME, max_output_tokens=request.max_tokens
+#         )
+#         response = model.invoke(prompt)
+
+#         return QueryResponse(
+#             answer=response.content, sources=sources, relevance_scores=relevant_scores
+#         )
+
+#     except Exception as e:
+#         logger.error("Error processing query: %s", e)
+#         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.post("/reload")

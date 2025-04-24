@@ -3,7 +3,7 @@ import shutil
 import os
 import logging
 from dotenv import load_dotenv
-from langchain_community.document_loaders import GithubFileLoader
+from langchain_community.document_loaders import GithubFileLoader, PyPDFLoader, DirectoryLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
@@ -41,53 +41,95 @@ def load_documents(repository: str) -> list[Document]:
     # if not os.path.exists(repository):
     #     raise FileNotFoundError(f"repository not found: {repository}")
     # loader = DirectoryLoader(repository, glob="**/*.md")
-    loader = GithubFileLoader(
-        repo="nudgenow/nudge-devdocs",
-        branch="prod_main",
-        file_filter=lambda file_path: file_path.endswith(
-            ".md") and file_path.startswith("docs/"),
-        directory=["docs/"],
-        access_token=GITHUB_TOKEN,
-    )
+    # loader = GithubFileLoader(
+    #     repo="nudgenow/nudge-devdocs",
+    #     branch="prod_main",
+    #     file_filter=lambda file_path: file_path.endswith(
+    #         ".md") and file_path.startswith("docs/"),
+    #     directory=["docs/"],
+    #     access_token=GITHUB_TOKEN,
+    # )
+
+    if not os.path.exists(repository):
+        raise FileNotFoundError(
+            f"Repository directory not found: {repository}")
+
+    # Check if it's a single PDF file
+    if os.path.isfile(repository) and repository.lower().endswith('.pdf'):
+        logging.info(f"Loading single PDF file: {repository}")
+        loader = PyPDFLoader(repository)
+        documents = loader.load()
+        logging.info(f"Loaded 1 PDF document with {len(documents)} pages")
+    else:
+        # Load all PDFs from directory
+        logging.info(f"Loading all PDFs from directory: {repository}")
+        loader = DirectoryLoader(
+            repository,
+            glob="**/*.pdf",
+            loader_cls=PyPDFLoader
+        )
+        documents = loader.load()
+        logging.info(f"Loaded {len(documents)} PDF pages from directory")
+
     documents = loader.load()
 
-    import re
-    # Process the metadata to remove numbering prefixes
-    for doc in documents:
-        original_path = doc.metadata['source'].split("docs/")[-1]
-        filename = os.path.basename(doc.metadata["source"])
+    # Process the metadata to create titles and URLs
+    for i, doc in enumerate(documents):
+        # If it's a single document, use the filename as title
+        if "source" in doc.metadata:
+            filename = os.path.basename(doc.metadata["source"])
+            base_name = os.path.splitext(filename)[0]
+            clean_title = base_name.replace('-', ' ').replace('_', ' ').title()
 
-        # Split the path into components
-        path_parts = original_path.split('/')
+            doc.metadata['title'] = doc.metadata.get('title', clean_title)
 
-        # Clean each component by removing the numbering prefix
-        cleaned_parts = [
-            re.sub(r'^\d+[\-\.]', '', part)
-            for part in path_parts
-        ]
+            # If we have a base URL and want to create reference links
+            if BASE_URL:
+                doc.metadata['url'] = f"{BASE_URL}/{base_name}"
+        else:
+            # If source is not in metadata, create minimal metadata
+            doc.metadata['title'] = f"Document {i+1}"
+            doc.metadata['source'] = f"page_{i+1}"
 
-        # Reassemble the path
-        cleaned_path = '/'.join(cleaned_parts)
+    logging.info(f"Processed metadata for {len(documents)} documents")
 
-        # Replace spaces with underscores
-        cleaned_path = cleaned_path.replace(' ', '%20')
+    # import re
+    # # Process the metadata to remove numbering prefixes
+    # for doc in documents:
+    #     original_path = doc.metadata['source'].split("docs/")[-1]
+    #     filename = os.path.basename(doc.metadata["source"])
 
-        # Create web URL (remove .md extension)
-        web_path = os.path.splitext(cleaned_path)[0]
-        web_url = f"{BASE_URL}{web_path}"
+    #     # Split the path into components
+    #     path_parts = original_path.split('/')
 
-        # print(f"Cleaned path: {cleaned_path}")
-        # print(f"Web URL: {web_url}\n")
+    #     # Clean each component by removing the numbering prefix
+    #     cleaned_parts = [
+    #         re.sub(r'^\d+[\-\.]', '', part)
+    #         for part in path_parts
+    #     ]
 
-        if "title" not in doc.metadata:
-            clean_filename = re.sub(r'^\d+[\-\.]', '', filename)
-            clean_title = os.path.splitext(clean_filename)[
-                0].replace('-', ' ').title()
-            doc.metadata['title'] = clean_title
+    #     # Reassemble the path
+    #     cleaned_path = '/'.join(cleaned_parts)
 
-        # Update the document metadata with the new web URL
-        doc.metadata['source'] = web_url
-        doc.metadata['path'] = web_url
+    #     # Replace spaces with underscores
+    #     cleaned_path = cleaned_path.replace(' ', '%20')
+
+    #     # Create web URL (remove .md extension)
+    #     web_path = os.path.splitext(cleaned_path)[0]
+    #     web_url = f"{BASE_URL}{web_path}"
+
+    #     # print(f"Cleaned path: {cleaned_path}")
+    #     # print(f"Web URL: {web_url}\n")
+
+    #     if "title" not in doc.metadata:
+    #         clean_filename = re.sub(r'^\d+[\-\.]', '', filename)
+    #         clean_title = os.path.splitext(clean_filename)[
+    #             0].replace('-', ' ').title()
+    #         doc.metadata['title'] = clean_title
+
+    #     # Update the document metadata with the new web URL
+    #     doc.metadata['source'] = web_url
+    #     doc.metadata['path'] = web_url
 
     logging.info(
         f"Loaded {len(documents)} documents from repository: {repository}\n\n"
@@ -124,9 +166,6 @@ def create_chroma_db(
         shutil.rmtree(persist_directory)
 
     embeddings = GoogleGenerativeAIEmbeddings(model=embedding_model)
-
-    __import__('pysqlite3')
-    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
     db = Chroma.from_documents(
         chunks,

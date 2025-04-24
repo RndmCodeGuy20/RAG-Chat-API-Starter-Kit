@@ -21,3 +21,5 @@ db/chroma/*
 *.md
 .secrets/
 .idea/
+fine-tuning.ipynb
+
